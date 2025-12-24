@@ -10,40 +10,13 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "server.hpp"
+#pragma once
 
-void	parsing(char *v1, char *v2)
-{
-	std::string p = v1;
-	for (int i = 0; p[i]; ++i)
-	{
-		if (!isdigit(p[i]))
-			throw std::runtime_error("Port should be between 1 and 65535");
-	}
-	int port = atoi(v1);
-	if (port < 1 || port > 65535)
-		throw std::runtime_error("Port should be between 1 and 65535");
-	std::string pass = v2;
-	if (pass.empty() || std::find_if(pass.begin(), pass.end(), ::isspace) != pass.end())
-		throw std::runtime_error("Password error");
-}
+#define RESET   "\033[0m"
+#define RED     "\033[31m"
+#define GREEN   "\033[32m"
+#define YELLOW  "\033[33m"
+#define BLUE    "\033[34m"
+#define MAGENTA "\033[35m"
+#define CYAN    "\033[36m"
 
-int	main(int c, char **v)
-{
-	if (c != 3)
-	{
-		std::cerr << "ERROR, program only works with 3 args : ./ircserv <port> <password> " << std::endl;
-		return (1);
-	}
-	try
-	{
-		parsing(v[1], v[2]);
-		Server s(atoi(v[1]), v[2]);
-		s.start();
-	}
-	catch (std::exception &e)
-	{
-		std::cerr << e.what() << std::endl;
-		return (1);
-	}
-}

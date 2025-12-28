@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmedjahe <mmedjahe@student.42.fr>          +#+  +:+       +#+        */
+/*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 17:01:36 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/23 15:45:00 by you              ###   ########.fr       */
+/*   Updated: 2025/12/28 18:54:58 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,25 @@
 Server::Server(int port, const std::string& password) : _port(port), _password(password), _serverName("ircserv")
 {}
 
-Server::~Server(){}
+Server::~Server()
+{
+    for (size_t i = 0; i < listClients.size(); ++i)
+    {
+        delete listClients[i];
+    }
+    listClients.clear();
+
+    for (std::map<std::string, Channel*>::iterator it = listChannels.begin(); it != listChannels.end(); ++it)
+    {
+        delete it->second;
+    }
+    listChannels.clear();
+
+    pollfds.clear();
+
+    if (_socketfd >= 0)
+        close(_socketfd);
+}
 
 void Server::start(){
     _socketfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -94,7 +112,6 @@ void Server::disconnectClient(int client_fd)
 {
     std::cout << RED << "Client " << client_fd << " has disconnected." << RESET << std::endl << std::endl;
 
-    // Find and remove the pollfd struct
     for (size_t i = 1; i < pollfds.size(); ++i)
     {
         if (pollfds[i].fd == client_fd)
@@ -104,15 +121,26 @@ void Server::disconnectClient(int client_fd)
         }
     }
 
-    // Find and remove the Client object
     for (size_t i = 0; i < listClients.size(); ++i)
     {
         if (listClients[i]->getfd() == client_fd)
         {
-            // Remove the client from all channels
-            for (std::map<std::string, Channel*>::iterator it = listChannels.begin(); it != listChannels.end(); ++it)
+            std::map<std::string, Channel*>::iterator it = listChannels.begin();
+            while (it != listChannels.end())
             {
                 it->second->removeClient(listClients[i]);
+                
+                if (it->second->getClients().empty())
+                {
+                    delete it->second;
+                    std::map<std::string, Channel*>::iterator toErase = it;
+                    ++it;
+                    listChannels.erase(toErase);
+                }
+                else
+                {
+                    ++it;
+                }
             }
 
             delete listClients[i];
@@ -120,9 +148,7 @@ void Server::disconnectClient(int client_fd)
             break;
         }
     }
-    
-    close(client_fd);
-}
+    }
 
 void Server::handle_client_data(int client_fd)
 {
@@ -177,7 +203,10 @@ void Server::process_command(Client *client, const std::string &message)
         {
             args.push_back(arg);
         }
-        args.push_back(after_colon);
+        if (command == "NICK" && colon_pos == 0)
+            args.push_back(":" + after_colon);
+        else
+            args.push_back(after_colon);
     }
     else
     {
@@ -196,6 +225,8 @@ void Server::process_command(Client *client, const std::string &message)
         handle_user(this, client, args);
     else if (command == "JOIN")
         handle_join(this, client, args);
+    else if (command == "PART")
+        handle_part(this, client, args);
     else if (command == "PRIVMSG")
         handle_privmsg(this, client, args);
     else if (command == "KICK")
@@ -206,9 +237,20 @@ void Server::process_command(Client *client, const std::string &message)
         handle_topic(this, client, args);
     else if (command == "MODE")
         handle_mode(this, client, args);
+    else if (command == "CAP")
+        handle_cap(this, client, args);
+    else if (command == "PING")
+        handle_ping(this, client, args);
+    else if (command == "WHOIS")
+        handle_whois(this, client, args);
+    else if (command == "QUIT")
+        handle_quit(this, client, args);
+    else if (command == "WHO")
+        handle_who(this, client, args);
     else
     {
         std::cout << RED << "Unknown command from client " << client->getfd() << ": " << command << RESET << std::endl << std::endl;
+        client->send_reply(":" + _serverName + " 421 " + (client->getname().empty() ? "*" : client->getname()) + " " + command + " :Unknown command");
     }
 }
 
@@ -243,6 +285,11 @@ Channel* Server::getChannel(const std::string& name)
     if (it != listChannels.end())
         return it->second;
     return NULL;
+}
+
+const std::map<std::string, Channel*>& Server::getChannels() const
+{
+    return listChannels;
 }
 
 void Server::createChannel(const std::string& name, Client* op)

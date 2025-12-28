@@ -3,14 +3,24 @@
 /*                                                        :::      ::::::::   */
 /*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmedjahe <mmedjahe@student.42.fr>          +#+  +:+       +#+        */
+/*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 16:15:02 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/15 21:18:09 by mmedjahe         ###   ########.fr       */
+/*   Updated: 2025/12/28 18:10:37 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "server.hpp"
+#include <csignal>
+#include <cstdlib>
+
+bool g_shutdown = false;
+
+void signalHandler(int signum)
+{
+	(void)signum;
+	g_shutdown = true;
+}
 
 void	parsing(char *v1, char *v2)
 {
@@ -35,6 +45,9 @@ int	main(int c, char **v)
 		std::cerr << "ERROR, program only works with 3 args : ./ircserv <port> <password> " << std::endl;
 		return (1);
 	}
+	
+	signal(SIGINT, signalHandler);
+	
 	try
 	{
 		parsing(v[1], v[2]);

@@ -43,7 +43,6 @@ public:
     bool isInvited(Client* client);
     void removeInvited(Client* client);
 
-    // Modes
     bool isInviteOnly() const;
     void setInviteOnly(bool value);
     bool isTopicRestricted() const;

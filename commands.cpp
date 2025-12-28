@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   commands.cpp                                       :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmedjahe <mmedjahe@student.42.fr>          +#+  +:+       +#+        */
+/*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 16:15:02 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/15 21:18:09 by mmedjahe         ###   ########.fr       */
+/*   Updated: 2025/12/28 19:17:12 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,6 +36,28 @@ void handle_pass(Server *server, Client *client, std::vector<std::string> &args)
 		client->send_reply(":" + server->getServerName() + " 464 " + (client->getname().empty() ? "*" : client->getname()) + " :Password incorrect");
 }
 
+static bool isValidNickname(const std::string &nick)
+{
+	if (nick.empty() || nick.length() > 9)
+		return false;
+	
+	if (nick[0] == '#' || nick[0] == ':' || nick[0] == ' ')
+		return false;
+	
+	if (isdigit(nick[0]))
+		return false;
+	
+	for (size_t i = 0; i < nick.length(); ++i)
+	{
+		char c = nick[i];
+		if (!isalnum(c) && c != '[' && c != ']' && c != '{' && c != '}' && c != '\\' && c != '|' && c != '-' && c != '_')
+			return false;
+		if (c == ' ')
+			return false;
+	}
+	return true;
+}
+
 void handle_nick(Server *server, Client *client, std::vector<std::string> &args)
 {
 	if (!client->hasValidPassword())
@@ -43,23 +65,43 @@ void handle_nick(Server *server, Client *client, std::vector<std::string> &args)
 		client->send_reply(":" + server->getServerName() + " 464 " + (client->getname().empty() ? "*" : client->getname()) + " :Password incorrect");
 		return;
 	}
-	if (args.empty() || args[0].empty())
+	if (args.empty())
 	{
 		client->send_reply(":" + server->getServerName() + " 431 " + (client->getname().empty() ? "*" : client->getname()) + " :No nickname given");
 		return;
 	}
-	const std::string &nick = args[0];
-	if (nick.length() > 9)
+	
+	std::string nick = args[0];
+	
+	if (nick.empty())
+	{
+		client->send_reply(":" + server->getServerName() + " 431 " + (client->getname().empty() ? "*" : client->getname()) + " :No nickname given");
+		return;
+	}
+	
+	if (!isValidNickname(nick))
 	{
 		client->send_reply(":" + server->getServerName() + " 432 " + (client->getname().empty() ? "*" : client->getname()) + " " + nick + " :Erroneous nickname");
 		return;
 	}
-	if (server->getClientByNick(nick))
+	
+	Client* existingClient = server->getClientByNick(nick);
+	if (existingClient && existingClient != client)
 	{
 		client->send_reply(":" + server->getServerName() + " 433 " + (client->getname().empty() ? "*" : client->getname()) + " " + nick + " :Nickname is already in use");
 		return;
 	}
+	
+	std::string oldNick = client->getname();
+	
 	client->setNickname(nick);
+	
+	if (client->isRegistered() && !oldNick.empty())
+	{
+		std::string nickChangeMsg = ":" + oldNick + "!" + client->getUsername() + "@" + client->getip() + " NICK :" + nick;
+		client->send_reply(nickChangeMsg);
+	}
+	
     if (!client->isRegistered() && !client->getUsername().empty())
     {
         client->setRegistered(true);
@@ -151,10 +193,13 @@ void handle_join(Server *server, Client *client, std::vector<std::string> &args)
             channel->addClient(client);
         }
 
-        std::string join_msg = ":" + client->getname() + " JOIN " + channel_name;
+        std::string join_msg = ":" + client->getname() + "!" + client->getUsername() + "@" + client->getip() + " JOIN " + channel_name;
         channel->broadcast(join_msg);
+        
         if (!channel->getTopic().empty())
+        {
             client->send_reply(":" + server->getServerName() + " 332 " + client->getname() + " " + channel_name + " :" + channel->getTopic());
+        }
         
         std::string nicks;
         const std::vector<Client*>& clients = channel->getClients();
@@ -351,14 +396,25 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
 		client->send_reply(":" + server->getServerName() + " 451 " + client->getname() + " :You have not registered");
 		return;
 	}
-	if (args.size() < 2)
+	if (args.empty())
     {
         client->send_reply(":" + server->getServerName() + " 461 " + client->getname() + " MODE :Not enough parameters");
         return;
     }
 
-    const std::string& channel_name = args[0];
-    const std::string& modestring = args[1];
+    const std::string& target = args[0];
+    
+    if (target[0] != '#')
+    {
+        if (args.size() >= 2 && target == client->getname())
+        {
+            return;
+        }
+        client->send_reply(":" + server->getServerName() + " 221 " + client->getname() + " +");
+        return;
+    }
+    
+    const std::string& channel_name = target;
     
     Channel* channel = server->getChannel(channel_name);
     if (!channel)
@@ -366,6 +422,34 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
         client->send_reply(":" + server->getServerName() + " 403 " + client->getname() + " " + channel_name + " :No such channel");
         return;
     }
+
+    if (args.size() < 2)
+    {
+        std::string modes = "+";
+        std::string params = "";
+        
+        if (channel->isInviteOnly())
+            modes += "i";
+        if (channel->isTopicRestricted())
+            modes += "t";
+        if (!channel->getPassword().empty())
+        {
+            modes += "k";
+            params += " " + channel->getPassword();
+        }
+        if (channel->getUserLimit() > 0)
+        {
+            modes += "l";
+            std::ostringstream oss;
+            oss << channel->getUserLimit();
+            params += " " + oss.str();
+        }
+        
+        client->send_reply(":" + server->getServerName() + " 324 " + client->getname() + " " + channel_name + " " + modes + params);
+        return;
+    }
+    
+    const std::string& modestring = args[1];
 
     if (!channel->isOperator(client))
     {
@@ -381,6 +465,9 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
 
     bool adding_mode = (modestring[0] == '+');
     size_t arg_index = 2;
+    std::string applied_modes = "";
+    std::string applied_params = "";
+    bool mode_applied = false;
 
     for (size_t i = 1; i < modestring.length(); ++i)
     {
@@ -389,9 +476,14 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
         {
             case 'i':
                 channel->setInviteOnly(adding_mode);
+                applied_modes += mode;
+                mode_applied = true;
+                mode_applied = true;
                 break;
             case 't':
                 channel->setTopicRestricted(adding_mode);
+                applied_modes += mode;
+                mode_applied = true;
                 break;
             case 'k':
                 if (adding_mode)
@@ -399,6 +491,9 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                     if (arg_index < args.size())
                     {
                         channel->setPassword(args[arg_index]);
+                        applied_modes += mode;
+                        applied_params += " " + args[arg_index];
+                        mode_applied = true;
                         arg_index++;
                     }
                     else
@@ -407,6 +502,8 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                 else
                 {
                     channel->setPassword("");
+                    applied_modes += mode;
+                    mode_applied = true;
                 }
                 break;
             case 'o':
@@ -421,6 +518,9 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                     {
                         if (adding_mode) channel->addOperator(target);
                         else channel->removeOperator(target);
+                        applied_modes += mode;
+                        applied_params += " " + args[arg_index];
+                        mode_applied = true;
                     }
                     arg_index++;
                 }
@@ -433,6 +533,9 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                     if (arg_index < args.size())
                     {
                         channel->setUserLimit(atoi(args[arg_index].c_str()));
+                        applied_modes += mode;
+                        applied_params += " " + args[arg_index];
+                        mode_applied = true;
                         arg_index++;
                     }
                     else
@@ -441,6 +544,8 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                 else
                 {
                     channel->setUserLimit(0);
+                    applied_modes += mode;
+                    mode_applied = true;
                 }
                 break;
             default:
@@ -448,8 +553,198 @@ void handle_mode(Server *server, Client *client, std::vector<std::string> &args)
                 break;
         }
     }
-    std::string mode_msg = ":" + client->getname() + " MODE " + channel_name + " " + modestring;
-    for (size_t i = 2; i < arg_index; ++i)
-        mode_msg += " " + args[i];
-    channel->broadcast(mode_msg);
+    
+    // Only broadcast if at least one mode was successfully applied
+    if (mode_applied && !applied_modes.empty())
+    {
+        std::string mode_prefix = adding_mode ? "+" : "-";
+        std::string mode_msg = ":" + client->getname() + " MODE " + channel_name + " " + mode_prefix + applied_modes + applied_params;
+        channel->broadcast(mode_msg);
+    }
+}
+
+void handle_cap(Server *server, Client *client, std::vector<std::string> &args)
+{
+	if (args.empty())
+		return;
+	
+	std::string subcmd = args[0];
+	
+	if (subcmd == "LS")
+	{
+		client->send_reply(":" + server->getServerName() + " CAP * LS :");
+	}
+	else if (subcmd == "END")
+	{
+		return;
+	}
+	else if (subcmd == "REQ")
+	{
+		if (args.size() > 1)
+			client->send_reply(":" + server->getServerName() + " CAP * NAK :" + args[1]);
+	}
+}
+
+void handle_part(Server *server, Client *client, std::vector<std::string> &args)
+{
+	if (!client->isRegistered())
+	{
+		client->send_reply(":" + server->getServerName() + " 451 " + client->getname() + " :You have not registered");
+		return;
+	}
+
+	if (args.empty())
+	{
+		client->send_reply(":" + server->getServerName() + " 461 " + client->getname() + " PART :Not enough parameters");
+		return;
+	}
+
+	std::string channel_list = args[0];
+	std::string reason = (args.size() > 1) ? args[1] : client->getname();
+	std::stringstream ss(channel_list);
+	std::string channel_name;
+
+	while (std::getline(ss, channel_name, ','))
+	{
+		Channel* channel = server->getChannel(channel_name);
+		if (!channel)
+		{
+			client->send_reply(":" + server->getServerName() + " 403 " + client->getname() + " " + channel_name + " :No such channel");
+			continue;
+		}
+
+		if (!channel->isClientInChannel(client))
+		{
+			client->send_reply(":" + server->getServerName() + " 442 " + client->getname() + " " + channel_name + " :You're not on that channel");
+			continue;
+		}
+
+		std::string part_msg = ":" + client->getname() + "!" + client->getUsername() + "@" + client->getip() + " PART " + channel_name + " :" + reason;
+		channel->broadcast(part_msg);
+
+		channel->removeClient(client);
+	}
+}
+
+void handle_ping(Server *server, Client *client, std::vector<std::string> &args)
+{
+	if (args.empty())
+	{
+		client->send_reply(":" + server->getServerName() + " PONG " + server->getServerName());
+	}
+	else
+	{
+		client->send_reply(":" + server->getServerName() + " PONG " + server->getServerName() + " :" + args[0]);
+	}
+}
+
+void handle_whois(Server *server, Client *client, std::vector<std::string> &args)
+{
+	if (!client->isRegistered())
+	{
+		client->send_reply(":" + server->getServerName() + " 451 " + client->getname() + " :You have not registered");
+		return;
+	}
+
+	if (args.empty())
+	{
+		client->send_reply(":" + server->getServerName() + " 431 " + client->getname() + " :No nickname given");
+		return;
+	}
+
+	std::string target_nick = args[0];
+	Client* target = server->getClientByNick(target_nick);
+
+	if (!target)
+	{
+		client->send_reply(":" + server->getServerName() + " 401 " + client->getname() + " " + target_nick + " :No such nick/channel");
+		client->send_reply(":" + server->getServerName() + " 318 " + client->getname() + " " + target_nick + " :End of WHOIS list");
+		return;
+	}
+
+	client->send_reply(":" + server->getServerName() + " 311 " + client->getname() + " " + target->getname() + " " + target->getUsername() + " " + target->getip() + " * :" + target->getUsername());
+
+	client->send_reply(":" + server->getServerName() + " 312 " + client->getname() + " " + target->getname() + " " + server->getServerName() + " :IRC Server");
+
+	client->send_reply(":" + server->getServerName() + " 318 " + client->getname() + " " + target->getname() + " :End of WHOIS list");
+}
+
+void handle_quit(Server *server, Client *client, std::vector<std::string> &args)
+{
+	std::string quit_msg = (args.empty()) ? "Client quit" : args[0];
+	
+	std::string quit_notification = ":" + client->getname() + "!" + client->getUsername() + "@" + client->getip() + " QUIT :" + quit_msg;
+	
+	const std::map<std::string, Channel*>& channels = server->getChannels();
+	for (std::map<std::string, Channel*>::const_iterator it = channels.begin(); it != channels.end(); ++it)
+	{
+		Channel* channel = it->second;
+		if (channel->isClientInChannel(client))
+		{
+			channel->broadcast(quit_notification, client);
+			channel->removeClient(client);
+		}
+	}
+	
+	client->send_reply("ERROR :Closing connection: " + quit_msg);
+}
+
+void handle_who(Server *server, Client *client, std::vector<std::string> &args)
+{
+	if (!client->isRegistered())
+	{
+		client->send_reply(":" + server->getServerName() + " 451 " + client->getname() + " :You have not registered");
+		return;
+	}
+
+	if (args.empty())
+	{
+		client->send_reply(":" + server->getServerName() + " 461 " + client->getname() + " WHO :Not enough parameters");
+		return;
+	}
+
+	std::string target = args[0];
+
+	// WHO query for a channel
+	if (target[0] == '#')
+	{
+		Channel* channel = server->getChannel(target);
+		if (!channel)
+		{
+			// RPL_ENDOFWHO (315) - send even if channel doesn't exist
+			client->send_reply(":" + server->getServerName() + " 315 " + client->getname() + " " + target + " :End of WHO list");
+			return;
+		}
+
+		const std::vector<Client*>& clients = channel->getClients();
+		for (size_t i = 0; i < clients.size(); ++i)
+		{
+			Client* member = clients[i];
+			std::string prefix = channel->isOperator(member) ? "@" : "";
+			
+			// RPL_WHOREPLY (352): <channel> <user> <host> <server> <nick> <H|G>[*][@|+] :<hopcount> <real name>
+			// H = here, G = gone (away), * = IRC operator, @ = channel operator, + = voiced
+			client->send_reply(":" + server->getServerName() + " 352 " + client->getname() + " " + 
+			                  target + " " + member->getUsername() + " " + member->getip() + " " + 
+			                  server->getServerName() + " " + member->getname() + " H" + prefix + " :0 " + member->getUsername());
+		}
+		
+		// RPL_ENDOFWHO (315)
+		client->send_reply(":" + server->getServerName() + " 315 " + client->getname() + " " + target + " :End of WHO list");
+	}
+	else
+	{
+		// WHO query for a user
+		Client* target_client = server->getClientByNick(target);
+		if (target_client)
+		{
+			// RPL_WHOREPLY (352)
+			client->send_reply(":" + server->getServerName() + " 352 " + client->getname() + " * " + 
+			                  target_client->getUsername() + " " + target_client->getip() + " " + 
+			                  server->getServerName() + " " + target_client->getname() + " H :0 " + target_client->getUsername());
+		}
+		
+		// RPL_ENDOFWHO (315)
+		client->send_reply(":" + server->getServerName() + " 315 " + client->getname() + " " + target + " :End of WHO list");
+	}
 }

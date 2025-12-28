@@ -2,10 +2,7 @@
 
 This project is an implementation of an Internet Relay Chat (IRC) server in C++98. 
 
-The server is designed to handle multiple clients simultaneously using non-blocking I/O with `poll()`. It supports basic IRC features such as user registration, joining channels, and sending private messages.
-
 ## How to use
-
 
 - **Compile:** `make`
 - **Run:** `./ircserv <port> <password>`
@@ -19,6 +16,7 @@ To register with the server, send the following commands in order:
 3.  `USER <username> 0 * :<realname>`
 
 ### Joining a Channel
+
 - `JOIN #<channelname>`
 
 ### Sending Messages
@@ -66,11 +64,11 @@ If you are the operator of a channel (i.e., you were the first to join), you can
 ## Test Commands :
 
 ### Terminal 1
-./ircserv 6667 test
+valgrind --leak-check=full --show-leak-kinds=all --trace-children=yes --track-fds=yes ./ircserv 6667 tt
 
 ### Terminal 2
 nc -C localhost 6667
-PASS test
+PASS tt
 NICK will
 USER will0 0 * :Wilfried
 JOIN #chan
@@ -86,17 +84,12 @@ MODE #chan o
 MODE #chan l
 
 ### Terminal 3
+irssi
+/connect localhost 6667 tt
 nc -C localhost 6667
-PASS test
+PASS tt
 NICK tom
 USER tom0 0 * :Thomas
 JOIN #chan
 PRIVMSG #chan :This is a msg testtttt
 PRIVMSG will :This is a priv msg test
-
-### Terminal 4
-nc -C localhost 6667
-PASS test
-NICK mehdi
-USER meh0 0 * :di
-JOIN #chan

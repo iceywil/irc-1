@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmedjahe <mmedjahe@student.42.fr>          +#+  +:+       +#+        */
+/*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 16:57:08 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/17 16:54:57 by mmedjahe         ###   ########.fr       */
+/*   Updated: 2025/12/28 17:54:32 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,6 +45,7 @@ class Server
     Client* getClientByFd(int fd);
     Client* getClientByNick(const std::string& nick);
     Channel* getChannel(const std::string& name);
+    const std::map<std::string, Channel*>& getChannels() const;
     void createChannel(const std::string& name, Client* op);
     const std::string& getServerName() const;
 	

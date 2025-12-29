@@ -6,11 +6,11 @@
 /*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 16:15:02 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/28 18:10:37 by wscherre         ###   ########.fr       */
+/*   Updated: 2025/12/29 16:55:41 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "server.hpp"
+#include "../include/server.hpp"
 #include <csignal>
 #include <cstdlib>
 

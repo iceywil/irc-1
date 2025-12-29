@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "client.hpp"
+#include "../include/client.hpp"
 #include <unistd.h>
 
 Client::Client(int cfd, int cport, const std::string& cip) : fd(cfd), port(cport), ip(cip), is_registered(false), has_valid_password(false)

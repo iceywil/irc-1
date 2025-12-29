@@ -10,8 +10,8 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "channel.hpp"
-#include "client.hpp"
+#include "../include/channel.hpp"
+#include "../include/client.hpp"
 #include <algorithm>
 #include <sys/socket.h>
 

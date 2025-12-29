@@ -6,15 +6,15 @@
 /*   By: wscherre <wscherre@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/09 17:01:36 by mmedjahe          #+#    #+#             */
-/*   Updated: 2025/12/28 18:54:58 by wscherre         ###   ########.fr       */
+/*   Updated: 2025/12/29 16:57:50 by wscherre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "server.hpp"
-#include "client.hpp"
-#include "commands.hpp"
-#include "channel.hpp"
-#include "colors.hpp"
+#include "../include/server.hpp"
+#include "../include/client.hpp"
+#include "../include/commands.hpp"
+#include "../include/channel.hpp"
+#include "../include/colors.hpp"
 #include <sstream>
 #include <vector>
 #include <algorithm>
